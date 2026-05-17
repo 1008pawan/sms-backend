@@ -28,7 +28,22 @@ const appointmentSchema = new mongoose.Schema(
 
     department: {
       type: String,
-      enum: ["Cardiology", "Neurology", "General Surgery"],
+      enum: [
+        "Neonatology & Pediatric Department",
+        "General Medicine",
+        "Orthopedic Department",
+        "Surgery Department",
+        "Gynecology Department",
+        "Urology Department",
+        "Psychiatric Department",
+        "ENT Department",
+        "Pathology Department",
+        "Neurology",
+        "Cardiology",
+        "Dental Department",
+        "General Surgery",
+        "Pediatric Surgery",
+      ],
       required: true,
     },
 
@@ -48,13 +63,12 @@ const appointmentSchema = new mongoose.Schema(
       default: "Pending",
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 appointmentSchema.index(
   { appointmentDate: 1, slot: 1, doctorId: 1 },
-  { unique: true }
+  { unique: true },
 );
-
 
 module.exports = mongoose.model("Appointment", appointmentSchema);

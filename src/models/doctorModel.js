@@ -6,14 +6,29 @@ const doctorSchema = new mongoose.Schema(
     name: { type: String, required: true },
     department: {
       type: String,
-      enum: ["Cardiology", "Neurology", "Orthopedics", "General Surgery"], 
+      enum: [
+        "Neonatology & Pediatric Department",
+        "General Medicine",
+        "Orthopedic Department",
+        "Surgery Department",
+        "Gynecology Department",
+        "Urology Department",
+        "Psychiatric Department",
+        "ENT Department",
+        "Pathology Department",
+        "Neurology",
+        "Cardiology",
+        "Dental Department",
+        "General Surgery",
+        "Pediatric Surgery",
+      ],
       required: true,
     },
-    specialty: { type: String }, 
+    specialty: { type: String },
     specialization: { type: String },
-    experience: { type: String },  
+    experience: { type: String },
     phone: { type: String },
-    photo: { type: String }, 
+    photo: { type: String },
     description: { type: String },
     isAvailable: {
       type: Boolean,
@@ -29,7 +44,7 @@ const doctorSchema = new mongoose.Schema(
       },
     ],
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 module.exports = mongoose.model("Doctor", doctorSchema);
