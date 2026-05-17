@@ -6,7 +6,6 @@ const cors = require("cors");
 const path = require("path");
 const cookieParser = require("cookie-parser");
 
-// Routers import
 const userRouter = require("./src/routers/userRouter");
 const adminRouter = require("./src/routers/adminRouter");
 const forgotPassRouter = require("./src/routers/forgotPassRouter");
@@ -16,9 +15,7 @@ const reviewRouter = require("./src/routers/reviewRouter");
 const doctorRoutes = require("./src/routers/doctorRouter");
 
 const app = express();
-const PORT = process.env.PORT || 5000;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(cookieParser());
@@ -37,6 +34,4 @@ app.get("/", (req, res) => {
   res.send("Server is Running...");
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port - ${PORT}`);
-});
+module.exports = app;
