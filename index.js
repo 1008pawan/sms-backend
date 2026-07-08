@@ -16,22 +16,37 @@ const doctorRoutes = require("./src/routers/doctorRouter");
 
 const app = express();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+  })
+);
 app.use(express.json());
 app.use(cookieParser());
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-app.use("/user", userRouter);
-app.use("/admin", adminRouter);
-app.use("/otp", forgotPassRouter);
-app.use("/appointment", appointmentRouter);
-app.use("/carrer", carrerRouter);
-app.use("/review", reviewRouter);
-app.use("/admin/doctors", doctorRoutes);
+app.use("/api/user", userRouter);
+app.use("/api/admin", adminRouter);
+app.use("/api/otp", forgotPassRouter);
+app.use("/api/appointment", appointmentRouter);
+app.use("/api/carrer", carrerRouter);
+app.use("/api/review", reviewRouter);
+app.use("/api/admin/doctors", doctorRoutes);
 
 app.get("/", (req, res) => {
   res.send("Server is Running...");
 });
+
+const PORT = process.env.PORT || 5000;
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
 
 module.exports = app;
