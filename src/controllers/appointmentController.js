@@ -1,8 +1,72 @@
 const Appointment = require("../models/appointmentModel");
 const Doctor = require("../models/doctorModel");
 
-/* ================= CREATE APPOINTMENT ================= */
+/* ---------- Helper function ---------- */
+const parseSlotToMinutes = (slotStr) => {
+  const match = slotStr.trim().match(/^(\d{1,2}):(\d{2})\s?(AM|PM)$/i);
+  if (!match) return null;
 
+  let [, h, m, period] = match;
+  h = parseInt(h, 10);
+  m = parseInt(m, 10);
+
+  if (period.toUpperCase() === "PM" && h !== 12) h += 12;
+  if (period.toUpperCase() === "AM" && h === 12) h = 0;
+
+  return h * 60 + m;
+};
+
+/* ================= GET APPOINTMENTS BY USER ID ================= */
+exports.getAppointmentsByUser = async (req, res) => {
+  try {
+    // 1. Query params se page & limit nikaalo
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(
+      Math.max(parseInt(req.query.limit, 10) || 10, 1),
+      100,
+    );
+    const skip = (page - 1) * limit;
+    
+    const filter = { userId: req.user._id };
+
+    const [total, appointments, statusCounts] = await Promise.all([
+      Appointment.countDocuments(filter),
+      Appointment.find(filter)
+        .populate("doctorId", "_id name department")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Appointment.aggregate([
+        { $match: { userId: req.user._id } },
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const stats = { Pending: 0, approved: 0, rejected: 0 };
+    statusCounts.forEach((s) => (stats[s._id] = s.count));
+
+    res.status(200).json({
+      success: true,
+      data: appointments,
+      stats: {
+        total: total,
+        pending: stats.Pending,
+        approved: stats.approved,
+        rejected: stats.rejected,
+      },
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (error) {
+    console.error("GET USER APPOINTMENTS ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Server error",
+    });
+  }
+};
+
+// ================ Create Appointment ====================
 exports.createAppointment = async (req, res) => {
   try {
     const { patientName, phone, department, appointmentDate, slot, doctorId } =
@@ -10,7 +74,7 @@ exports.createAppointment = async (req, res) => {
 
     const userId = req.user.id;
 
-    /* ---------- Validation ---------- */
+    /* ---------- 1. Basic Validation ---------- */
     if (
       !patientName ||
       !phone ||
@@ -25,7 +89,7 @@ exports.createAppointment = async (req, res) => {
       });
     }
 
-    /* ---------- Check Doctor ---------- */
+    /* ---------- 2. Check Doctor ---------- */
     const doctor = await Doctor.findById(doctorId);
 
     if (!doctor) {
@@ -42,8 +106,14 @@ exports.createAppointment = async (req, res) => {
       });
     }
 
-    /* ---------- Date Validation ---------- */
-    const selectedDate = new Date(appointmentDate);
+    /* ---------- 3. Date Validation (timezone-safe) ---------- */
+    let selectedDate;
+    if (typeof appointmentDate === "string" && appointmentDate.includes("-")) {
+      const [y, m, d] = appointmentDate.split("-").map(Number);
+      selectedDate = new Date(y, m - 1, d);
+    } else {
+      selectedDate = new Date(appointmentDate);
+    }
     selectedDate.setHours(0, 0, 0, 0);
 
     const today = new Date();
@@ -56,7 +126,31 @@ exports.createAppointment = async (req, res) => {
       });
     }
 
-    /* ---------- Check Slot Availability ---------- */
+    /* ---------- 4. Same-day past-time check ---------- */
+    const isToday = selectedDate.getTime() === today.getTime();
+
+    if (isToday) {
+      const slotMinutes = parseSlotToMinutes(slot);
+
+      if (slotMinutes === null) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid slot format",
+        });
+      }
+
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+      if (slotMinutes <= currentMinutes) {
+        return res.status(400).json({
+          success: false,
+          message: "Ye slot nikal chuka hai, aage ka slot choose karo",
+        });
+      }
+    }
+
+    /* ---------- 5. Slot Availability Check ---------- */
     const existingAppointment = await Appointment.findOne({
       appointmentDate: selectedDate,
       slot,
@@ -70,7 +164,7 @@ exports.createAppointment = async (req, res) => {
       });
     }
 
-    /* ---------- Create Appointment ---------- */
+    /* ---------- 6. Create Appointment ---------- */
     const appointment = await Appointment.create({
       userId,
       patientName,
@@ -82,7 +176,7 @@ exports.createAppointment = async (req, res) => {
       status: "Pending",
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Appointment booked successfully",
       data: appointment,
@@ -97,29 +191,24 @@ exports.createAppointment = async (req, res) => {
       });
     }
 
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors).map((e) => e.message);
+      return res.status(400).json({
+        success: false,
+        message: messages.join(", "),
+      });
+    }
 
-/* ================= GET APPOINTMENTS BY USER ID ================= */
-exports.getAppointmentsByUser = async (req, res) => {
-  try {
-    const appointments = await Appointment.find({
-      userId: req.user._id,
-    }).populate("doctorId", "_id name department");
+    if (error.name === "CastError") {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid ${error.path}: ${error.value}`,
+      });
+    }
 
-    res.status(200).json({
-      success: true,
-      data: appointments,
-    });
-  } catch (error) {
-    console.error("GET USER APPOINTMENTS ERROR:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Server error",
+      message: error.message || "Server error",
     });
   }
 };
@@ -158,7 +247,7 @@ exports.updateAppointmentStatus = async (req, res) => {
     const appointment = await Appointment.findByIdAndUpdate(
       req.params.id,
       { status },
-      { new: true }
+      { new: true },
     );
 
     if (!appointment) {

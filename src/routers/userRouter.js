@@ -8,16 +8,25 @@ const {
   loginUser,
   updateUser,
   deleteUser,
-  forgotPass,
+  changePassword,
   getProfile,
+  forgotPassword,
+  verifyOtp,
+  resetPassword,
 } = require("../controllers/userController");
+
+const rateLimit = require("express-rate-limit");
+const otpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5 });
 
 router.post("/add", addUser);
 router.post("/authenticate", loginUser);
 router.get("/getall", authMiddleware, getAllUsers);
 router.get("/me", authMiddleware, getProfile);
-router.put("/update", authMiddleware, updateUser);
+router.put("/profile", authMiddleware, updateUser);
 router.delete("/delete/:id", authMiddleware, deleteUser);
-router.get("/forgotPass/:phone", authMiddleware, forgotPass);
+router.put("/change-password", authMiddleware, changePassword);
+router.post("/forgot-password", otpLimiter, forgotPassword);
+router.post("/verify-otp", verifyOtp);
+router.post("/reset-password", resetPassword);
 
 module.exports = router;

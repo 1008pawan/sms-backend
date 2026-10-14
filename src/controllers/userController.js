@@ -1,6 +1,57 @@
 const Model = require("../models/userModel");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
+const sendMail = require("../utils/sendMail");
+const JWT_SECRET = process.env.JWT_SECRET || "secret123";
+
+// LOGIN USER (phone ya email se)
+exports.loginUser = async (req, res) => {
+  try {
+    let identifier = (req.body.identifier || req.body.phone || "")
+      .toString()
+      .trim();
+    const { password } = req.body;
+
+    if (!identifier || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone/Email and password are required",
+      });
+    }
+
+    const query = identifier.includes("@")
+      ? { email: identifier.toLowerCase() }
+      : { phone: identifier };
+
+    const user = await Model.findOne(query).select("+password");
+
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+      });
+    }
+
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "7d" });
+
+    return res.status(200).json({
+      success: true,
+      message: "Login successful",
+      token,
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        phone: user.phone,
+        email: user.email,
+        gender: user.gender,
+      },
+    });
+  } catch (error) {
+    console.error("LOGIN ERROR", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 
 // GET ALL USERS
 exports.getAllUsers = async (req, res) => {
@@ -15,7 +66,7 @@ exports.getAllUsers = async (req, res) => {
 // ADD USER (FINAL FIX)
 exports.addUser = async (req, res) => {
   try {
-    let { fullName, phone, password, gender } = req.body;
+    let { fullName, phone, email, password, gender } = req.body;
 
     const errors = {};
 
@@ -33,6 +84,13 @@ exports.addUser = async (req, res) => {
       errors.phone = "Phone number is required";
     } else if (!/^[0-9]{10}$/.test(phone.trim())) {
       errors.phone = "Phone number must be exactly 10 digits";
+    }
+
+    /* ================= EMAIL ================= */
+    if (!email || email.trim().length === 0) {
+      errors.email = "Email is required";
+    } else if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
+      errors.email = "Enter a valid email address";
     }
 
     /* ================= PASSWORD ================= */
@@ -67,14 +125,23 @@ exports.addUser = async (req, res) => {
     }
 
     phone = phone.trim();
+    email = email.trim().toLowerCase();
 
     /* ================= DUPLICATE CHECK ================= */
-    const existingUser = await Model.findOne({ phone });
+    const existingUser = await Model.findOne({ $or: [{ phone }, { email }] });
     if (existingUser) {
+      const dupErrors = {};
+      if (existingUser.phone === phone)
+        dupErrors.phone = "Phone number already exists";
+      if (existingUser.email === email)
+        dupErrors.email = "Email already exists";
+
       return res.status(409).json({
         success: false,
-        message: "Number already registered",
-        errors: { phone: "Phone number already exists" },
+        message: dupErrors.phone
+          ? "Number already registered"
+          : "Email already registered",
+        errors: dupErrors,
       });
     }
 
@@ -82,6 +149,7 @@ exports.addUser = async (req, res) => {
     const user = await Model.create({
       fullName: fullName.trim(),
       phone,
+      email,
       password,
       gender,
     });
@@ -107,72 +175,22 @@ exports.addUser = async (req, res) => {
         id: user._id,
         fullName: user.fullName,
         phone: user.phone,
+        email: user.email,
         gender: user.gender,
       },
     });
   } catch (err) {
+    // unique index se race condition mein duplicate aaye toh
+    if (err.code === 11000) {
+      const field = Object.keys(err.keyPattern || {})[0] || "field";
+      return res.status(409).json({
+        success: false,
+        message: `${field} already registered`,
+        errors: { [field]: `${field} already exists` },
+      });
+    }
     console.error("REGISTER ERROR", err);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-// LOGIN USER
-exports.loginUser = async (req, res) => {
-  try {
-    let { phone, password } = req.body;
-
-    if (!phone || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "Phone number and password are required",
-      });
-    }
-
-    phone = phone.trim();
-
-    const user = await Model.findOne({ phone });
-
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid phone number or password",
-      });
-    }
-
-    const isMatch = await bcrypt.compare(password, user.password);
-
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid phone number or password",
-      });
-    }
-
-    const token = jwt.sign(
-      { id: user._id },
-      process.env.JWT_SECRET || "secret123",
-      { expiresIn: "7d" },
-    );
-
-    return res.status(200).json({
-      success: true,
-      message: "Login successful",
-      token,
-      user: {
-        id: user._id,
-        phone: user.phone,
-        fullName: user.fullName,
-      },
-    });
-  } catch (error) {
-    console.error("LOGIN ERROR", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
@@ -193,16 +211,50 @@ exports.getProfile = async (req, res) => {
 // UPDATE USER
 exports.updateUser = async (req, res) => {
   try {
-    const { fullName, phone, gender, password } = req.body;
+    const { fullName, phone, email, gender } = req.body;
 
     const user = await Model.findById(req.user.id);
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
 
-    if (fullName) user.fullName = fullName;
-    if (phone) user.phone = phone;
+    if (fullName) user.fullName = fullName.trim();
     if (gender) user.gender = gender;
 
-    if (password) {
-      user.password = password;
+    if (phone) {
+      if (!/^[0-9]{10}$/.test(phone.trim())) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Phone must be 10 digits" });
+      }
+      const taken = await Model.findOne({
+        phone: phone.trim(),
+        _id: { $ne: user._id },
+      });
+      if (taken) {
+        return res
+          .status(409)
+          .json({ success: false, message: "Phone already in use" });
+      }
+      user.phone = phone.trim();
+    }
+
+    if (email) {
+      const e = email.trim().toLowerCase();
+      if (!/^\S+@\S+\.\S+$/.test(e)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid email" });
+      }
+      const taken = await Model.findOne({ email: e, _id: { $ne: user._id } });
+      if (taken) {
+        return res
+          .status(409)
+          .json({ success: false, message: "Email already in use" });
+      }
+      user.email = e;
     }
 
     await user.save();
@@ -213,6 +265,7 @@ exports.updateUser = async (req, res) => {
       data: {
         fullName: user.fullName,
         phone: user.phone,
+        email: user.email,
         gender: user.gender,
       },
     });
@@ -231,14 +284,230 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
-// FORGOT PASSWORD
-exports.forgotPass = async (req, res) => {
-  Model.find({ phone: req.params.phone })
-    .then((res) => {
-      res.json(result);
-    })
-    .catch((err) => {
-      console.log(err);
-      res.status(500).json(err);
+// CHANGE PASSWORD
+exports.changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required",
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Passwords do not match",
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters",
+      });
+    }
+
+    // 👈 .select("+password") ZAROORI hai
+    const user = await Model.findById(req.user.id).select("+password");
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: "Current password is incorrect",
+      });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be different from current",
+      });
+    }
+
+    user.password = newPassword; // pre-save hook hash karega
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Password changed successfully",
     });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// STEP 1: SEND OTP
+exports.forgotPassword = async (req, res) => {
+  try {
+    const email = (req.body.email || "").trim().toLowerCase();
+
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Valid email is required" });
+    }
+
+    const user = await Model.findOne({ email });
+
+    // Same response chahe user ho ya na ho (email enumeration se bachne ke liye)
+    const genericRes = {
+      success: true,
+      message: "If this email is registered, an OTP has been sent",
+    };
+
+    if (!user) return res.status(200).json(genericRes);
+
+    const otp = crypto.randomInt(100000, 1000000).toString(); // 6 digit
+
+    user.resetOtp = await bcrypt.hash(otp, 10);
+    user.resetOtpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+    user.resetOtpAttempts = 0;
+    await user.save();
+
+    await sendMail(
+      email,
+      "Your password reset code",
+      `<p>Your OTP is <b style="font-size:20px">${otp}</b></p>
+       <p>It is valid for 10 minutes. Do not share it with anyone.</p>`,
+    );
+
+    return res.status(200).json(genericRes);
+  } catch (err) {
+    console.error("FORGOT PASSWORD ERROR", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// STEP 2: VERIFY OTP
+exports.verifyOtp = async (req, res) => {
+  try {
+    const email = (req.body.email || "").trim().toLowerCase();
+    const otp = (req.body.otp || "").toString().trim();
+
+    if (!email || !/^[0-9]{6}$/.test(otp)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Email and 6 digit OTP required" });
+    }
+
+    const user = await Model.findOne({ email }).select(
+      "+resetOtp +resetOtpExpires +resetOtpAttempts",
+    );
+
+    if (
+      !user ||
+      !user.resetOtp ||
+      !user.resetOtpExpires ||
+      user.resetOtpExpires < new Date()
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, message: "OTP expired or invalid" });
+    }
+
+    if (user.resetOtpAttempts >= 5) {
+      return res.status(429).json({
+        success: false,
+        message: "Too many wrong attempts. Request a new OTP",
+      });
+    }
+
+    const isMatch = await bcrypt.compare(otp, user.resetOtp);
+
+    if (!isMatch) {
+      user.resetOtpAttempts += 1;
+      await user.save();
+      return res.status(400).json({ success: false, message: "Incorrect OTP" });
+    }
+
+    // OTP sahi hai -> OTP clear karo (single use)
+    user.resetOtp = undefined;
+    user.resetOtpExpires = undefined;
+    user.resetOtpAttempts = 0;
+    await user.save();
+
+    // Reset token: secret mein purana password hash mix hai,
+    // toh password change hote hi ye token apne aap invalid ho jayega
+    const resetToken = jwt.sign(
+      { id: user._id, purpose: "reset" },
+      JWT_SECRET + user.password,
+      { expiresIn: "10m" },
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "OTP verified",
+      resetToken,
+    });
+  } catch (err) {
+    console.error("VERIFY OTP ERROR", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// STEP 3: RESET PASSWORD
+exports.resetPassword = async (req, res) => {
+  try {
+    const { resetToken, newPassword } = req.body;
+
+    if (!resetToken || !newPassword) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Token and new password required" });
+    }
+
+    // Password validation (addUser jaisi)
+    if (
+      newPassword.length < 8 ||
+      !/[a-z]/.test(newPassword) ||
+      !/[A-Z]/.test(newPassword) ||
+      !/[0-9]/.test(newPassword) ||
+      !/[\W_]/.test(newPassword)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Password must be 8+ chars with uppercase, lowercase, number and special character",
+      });
+    }
+
+    const payload = jwt.decode(resetToken);
+    if (!payload || payload.purpose !== "reset") {
+      return res.status(400).json({ success: false, message: "Invalid token" });
+    }
+
+    const user = await Model.findById(payload.id);
+    if (!user) {
+      return res.status(400).json({ success: false, message: "Invalid token" });
+    }
+
+    try {
+      jwt.verify(resetToken, JWT_SECRET + user.password);
+    } catch {
+      return res
+        .status(400)
+        .json({ success: false, message: "Token expired or already used" });
+    }
+
+    user.password = newPassword; // pre-save hook hash kar dega
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Password changed successfully. Please login",
+    });
+  } catch (err) {
+    console.error("RESET PASSWORD ERROR", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
 };

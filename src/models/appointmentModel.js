@@ -1,5 +1,46 @@
-// models/appointmentModel.js
 const mongoose = require("mongoose");
+
+const DEPARTMENTS = [
+  "Neonatology & Pediatrician Department",
+  "General Medicine",
+  "Orthopedic Department",
+  "Surgery Department",
+  "Gynecology Department",
+  "Urology Department",
+  "Psychiatric Department",
+  "ENT Department",
+  "Pathology Department",
+  "Neurology",
+  "Cardiology",
+  "Dental Department",
+  "General Surgery",
+  "Pediatric Surgery",
+  "Gastro Surgery",
+];
+
+const SLOTS = (() => {
+  const slots = [];
+  const startHour = 9; // 9:00 AM
+  const endHour = 18; // 6:00 PM
+  const interval = 10; // 10 minutes
+
+  let totalMinutes = startHour * 60;
+  const endMinutes = endHour * 60;
+
+  while (totalMinutes < endMinutes) {
+    const hours24 = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    const period = hours24 >= 12 ? "PM" : "AM";
+    const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+    const paddedMinutes = minutes.toString().padStart(2, "0");
+
+    slots.push(`${hours12}:${paddedMinutes} ${period}`);
+    totalMinutes += interval;
+  }
+
+  return slots;
+})();
 
 const appointmentSchema = new mongoose.Schema(
   {
@@ -28,22 +69,7 @@ const appointmentSchema = new mongoose.Schema(
 
     department: {
       type: String,
-      enum: [
-        "Neonatology & Pediatric Department",
-        "General Medicine",
-        "Orthopedic Department",
-        "Surgery Department",
-        "Gynecology Department",
-        "Urology Department",
-        "Psychiatric Department",
-        "ENT Department",
-        "Pathology Department",
-        "Neurology",
-        "Cardiology",
-        "Dental Department",
-        "General Surgery",
-        "Pediatric Surgery",
-      ],
+      enum: DEPARTMENTS,
       required: true,
     },
 
@@ -54,7 +80,7 @@ const appointmentSchema = new mongoose.Schema(
 
     slot: {
       type: String,
-      enum: ["10:00 AM", "12:30 PM", "04:00 PM", "06:30 PM"],
+      enum: SLOTS,
       required: true,
     },
     status: {

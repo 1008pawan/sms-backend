@@ -7,7 +7,7 @@ const doctorSchema = new mongoose.Schema(
     department: {
       type: String,
       enum: [
-        "Neonatology & Pediatric Department",
+        "Neonatology & Pediatrician Department",
         "General Medicine",
         "Orthopedic Department",
         "Surgery Department",
@@ -21,6 +21,7 @@ const doctorSchema = new mongoose.Schema(
         "Dental Department",
         "General Surgery",
         "Pediatric Surgery",
+        "Gastro Surgery",
       ],
       required: true,
     },
