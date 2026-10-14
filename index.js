@@ -13,6 +13,7 @@ const appointmentRouter = require("./src/routers/appointmentRouter");
 const carrerRouter = require("./src/routers/carrerRouter");
 const reviewRouter = require("./src/routers/reviewRouter");
 const doctorRoutes = require("./src/routers/doctorRouter");
+const paymentRoutes = require("./src/routers/paymentRoutes");
 
 const app = express();
 
@@ -36,6 +37,8 @@ app.use("/api/appointment", appointmentRouter);
 app.use("/api/carrer", carrerRouter);
 app.use("/api/review", reviewRouter);
 app.use("/api/admin/doctors", doctorRoutes);
+app.use("/api/payment", paymentRoutes);
+
 
 app.get("/", (req, res) => {
   res.send("Server is Running...");

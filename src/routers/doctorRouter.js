@@ -13,7 +13,7 @@ const adminAuth = require("../middlewares/adminAuthMiddleware");
 
 router.get("/public/all", async (req, res) => {
   try {
-    const doctors = await Doctor.find({}); // Saare doctors fetch karo
+    const doctors = await Doctor.find({});
     res.status(200).json({ success: true, data: doctors });
   } catch (error) {
     res.status(500).json({ success: false, message: "Error fetching doctors" });
@@ -24,7 +24,7 @@ router.get("/public/all", async (req, res) => {
 // 🔐 ADMIN ONLY ROUTES
 router.get("/doctors", adminAuth, getAllDoctors);
 router.post('/doctors', upload.single('photo'), createDoctor);
-router.put("/doctors/:id", adminAuth, updateDoctor);
+router.put("/doctors/:id", upload.single("photo"), adminAuth, updateDoctor);
 
 // USER SIDE (NO ADMIN AUTH)
 router.get("/", async (req, res) => {

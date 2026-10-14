@@ -26,7 +26,7 @@ exports.getAppointmentsByUser = async (req, res) => {
       100,
     );
     const skip = (page - 1) * limit;
-    
+
     const filter = { userId: req.user._id };
 
     const [total, appointments, statusCounts] = await Promise.all([
@@ -176,10 +176,14 @@ exports.createAppointment = async (req, res) => {
       status: "Pending",
     });
 
+    const populatedAppointment = await Appointment.findById(
+      appointment._id,
+    ).populate("doctorId", "name department consultationFee");
+
     return res.status(201).json({
       success: true,
       message: "Appointment booked successfully",
-      data: appointment,
+      data: populatedAppointment,
     });
   } catch (error) {
     console.error("CREATE APPOINTMENT ERROR 👉", error);

@@ -35,6 +35,13 @@ const doctorSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    consultationFee: {
+      type: Number,
+      required: true,
+      default: 500,
+      min: 0,
+    },
+
     availableSlots: [
       {
         date: { type: Date, required: true },

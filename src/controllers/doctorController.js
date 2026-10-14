@@ -12,6 +12,7 @@ exports.createDoctor = async (req, res) => {
       experience,
       phone,
       description,
+      consultationFee,
     } = req.body;
 
     let photoPath = "";
@@ -27,6 +28,7 @@ exports.createDoctor = async (req, res) => {
       experience,
       phone,
       description,
+      consultationFee: Number(consultationFee) || 500,
       photo: photoPath,
     });
 
@@ -60,8 +62,35 @@ exports.getAllDoctors = async (req, res) => {
 /* ================= UPDATE DOCTOR ================= */
 exports.updateDoctor = async (req, res) => {
   try {
-    const doctor = await Doctor.findByIdAndUpdate(req.params.id, req.body, {
+    const {
+      name,
+      department,
+      specialty,
+      specialization,
+      experience,
+      phone,
+      description,
+      consultationFee,
+    } = req.body;
+
+    const updateData = {
+      name,
+      department,
+      specialty,
+      specialization,
+      experience,
+      phone,
+      description,
+      consultationFee: Number(consultationFee) || 500,
+    };
+
+    if (req.file) {
+      updateData.photo = req.file.path.replace(/\\/g, "/");
+    }
+
+    const doctor = await Doctor.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
+      runValidators: true,
     });
 
     if (!doctor) {
@@ -73,12 +102,14 @@ exports.updateDoctor = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      doctor,
+      data: doctor,
+      message: "Doctor updated successfully",
     });
   } catch (error) {
+    console.error("UPDATE DOCTOR ERROR:", error);
     res.status(500).json({
       success: false,
-      message: "Update failed",
+      message: error.message || "Update failed",
     });
   }
 };

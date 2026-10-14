@@ -88,6 +88,21 @@ const appointmentSchema = new mongoose.Schema(
       enum: ["Pending", "approved", "rejected"],
       default: "Pending",
     },
+    payment: {
+      isPaid: { type: Boolean, default: false },
+      razorpayOrderId: { type: String, default: null },
+      razorpayPaymentId: { type: String, default: null },
+      razorpaySignature: { type: String, default: null },
+      amount: { type: Number, default: 0 },
+      currency: { type: String, default: "INR" },
+      paidAt: { type: Date, default: null },
+
+      // Naye refund fields
+      isRefunded: { type: Boolean, default: false },
+      refundId: { type: String, default: null },
+      refundAmount: { type: Number, default: 0 },
+      refundedAt: { type: Date, default: null },
+    },
   },
   { timestamps: true },
 );
