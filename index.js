@@ -1,5 +1,5 @@
 require("dotenv").config();
-require("./connection");
+const connectDB = require("./connection");
 
 const express = require("express");
 const cors = require("cors");
@@ -23,10 +23,20 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Accept"],
-  })
+  }),
 );
 app.use(express.json());
 app.use(cookieParser());
+
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    console.error("DB error:", err.message);
+    res.status(500).json({ error: "Database connection failed" });
+  }
+});
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -38,7 +48,6 @@ app.use("/api/carrer", carrerRouter);
 app.use("/api/review", reviewRouter);
 app.use("/api/admin/doctors", doctorRoutes);
 app.use("/api/payment", paymentRoutes);
-
 
 app.get("/", (req, res) => {
   res.send("Server is Running...");
