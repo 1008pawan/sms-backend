@@ -73,6 +73,7 @@ exports.updateDoctor = async (req, res) => {
       consultationFee,
     } = req.body;
 
+    
     const updateData = {
       name,
       department,
