@@ -1,99 +1,109 @@
 const bcrypt = require("bcrypt");
 const User = require("../models/userModel");
-const OTP = require("../models/otpModel");
-const axios = require("axios");
+const OTP = require("../models/otpModel"); // 👈 Model update karna hoga
+const sendMail = require("../utils/sendMail");
 
 const generateOTP = () =>
   Math.floor(100000 + Math.random() * 900000).toString();
 
-/* ================= SEND OTP ================= */
+/* ================= SEND OTP (EMAIL) ================= */
 exports.requestOTP = async (req, res) => {
-  let { phone } = req.body;
+  let { email } = req.body;
 
   try {
-    if (!phone) {
-      return res.status(400).json({ message: "Phone number required" });
+    if (!email) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Email required" });
     }
 
-    phone = Number(phone);
+    email = email.trim().toLowerCase();
 
-    // ✅ RATE LIMIT PER PHONE (FIX)
+    // ✅ RATE LIMIT PER EMAIL (1 min)
     const recentOtp = await OTP.findOne({
-      phone,
+      email,
       createdAt: { $gte: new Date(Date.now() - 60 * 1000) },
     });
 
     if (recentOtp) {
       return res.status(429).json({
+        success: false,
         message: "Please wait 1 minute before requesting another OTP",
       });
     }
 
-    const user = await User.findOne({ phone });
+    const user = await User.findOne({ email });
     if (!user) {
-      return res.status(404).json({ message: "Phone not registered" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Email not registered" });
     }
 
-    await OTP.deleteMany({ phone });
+    await OTP.deleteMany({ email });
 
     const otp = generateOTP();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
     const hashedOtp = await bcrypt.hash(otp, 10);
 
     await OTP.create({
-      phone,
+      email,
       code: hashedOtp,
       expiresAt,
     });
 
-    // FAST2SMS
-    await axios.post(
-      "https://www.fast2sms.com/dev/bulkV2",
-      {
-        route: "v3",
-        sender_id: "TXTIND",
-        message: `Your OTP is ${otp}. Valid for 5 minutes.`,
-        language: "english",
-        numbers: phone.toString(),
-      },
-      {
-        headers: {
-          authorization: process.env.FAST2SMS_API_KEY,
-          "Content-Type": "application/json",
-        },
-      }
+    // SMTP EMAIL
+    await sendMail(
+      email,
+      "Your OTP for Password Reset",
+      `<div style="font-family: sans-serif; padding: 20px;">
+        <h2>Password Reset</h2>
+        <p>Your OTP is <b style="font-size: 24px; color: blue;">${otp}</b></p>
+        <p>It is valid for 5 minutes. Do not share it with anyone.</p>
+      </div>`,
     );
 
-    res.json({ success: true, message: "OTP sent successfully" });
+    try {
+      await sendMail(email, "Your OTP", `<p>OTP: ${otp}</p>`);
+    } catch (mailError) {
+      console.error("MAIL ERROR:", mailError);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send email. Check SMTP credentials.",
+      });
+    }
+
+    res.json({ success: true, message: "OTP sent successfully to your email" });
   } catch (error) {
-    console.error("OTP ERROR", error.response?.data || error);
-    res.status(500).json({ message: "Error sending OTP" });
+    console.error("OTP ERROR", error);
+    res.status(500).json({ success: false, message: "Error sending OTP" });
   }
 };
 
 /* ================= VERIFY OTP ================= */
 exports.verifyOTP = async (req, res) => {
-  let { phone, otp } = req.body;
+  let { email, otp } = req.body;
 
   try {
-    if (!phone || !otp) {
-      return res.status(400).json({ message: "Phone & OTP required" });
+    if (!email || !otp) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Email & OTP required" });
     }
 
-    phone = Number(phone);
+    email = email.trim().toLowerCase();
 
-    const otpRecord = await OTP.findOne({ phone });
+    const otpRecord = await OTP.findOne({ email });
     if (!otpRecord) {
-      return res.status(400).json({ message: "OTP not found" });
+      return res.status(400).json({ success: false, message: "OTP not found" });
     }
 
     if (otpRecord.expiresAt < new Date()) {
-      return res.status(400).json({ message: "OTP expired" });
+      return res.status(400).json({ success: false, message: "OTP expired" });
     }
 
     const isMatch = await bcrypt.compare(otp, otpRecord.code);
     if (!isMatch) {
-      return res.status(400).json({ message: "Invalid OTP" });
+      return res.status(400).json({ success: false, message: "Invalid OTP" });
     }
 
     otpRecord.verified = true;
@@ -102,44 +112,61 @@ exports.verifyOTP = async (req, res) => {
     res.json({ success: true, message: "OTP verified" });
   } catch (error) {
     console.error("VERIFY OTP ERROR", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
 /* ================= RESET PASSWORD ================= */
 exports.resetPass = async (req, res) => {
-  let { phone, newPassword } = req.body;
+  let { email, newPassword } = req.body;
 
   try {
-    if (!phone || !newPassword) {
-      return res.status(400).json({ message: "Required fields missing" });
+    if (!email || !newPassword) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Required fields missing" });
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ message: "Password min 6 characters" });
+    email = email.trim().toLowerCase();
+
+    // Password validation
+    if (
+      newPassword.length < 8 ||
+      !/[a-z]/.test(newPassword) ||
+      !/[A-Z]/.test(newPassword) ||
+      !/[0-9]/.test(newPassword) ||
+      !/[\W_]/.test(newPassword)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Password must be 8+ chars with uppercase, lowercase, number and special character",
+      });
     }
 
-    phone = Number(phone);
-
-    const otpRecord = await OTP.findOne({ phone, verified: true });
+    const otpRecord = await OTP.findOne({ email, verified: true });
     if (!otpRecord) {
-      return res.status(403).json({ message: "OTP not verified" });
+      return res
+        .status(403)
+        .json({ success: false, message: "OTP not verified" });
     }
 
-    const user = await User.findOne({ phone });
+    const user = await User.findOne({ email }).select("+password");
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
-    user.password = await bcrypt.hash(newPassword, 10);
+    // Model me pre-save hook hash kar raha hai, toh plain password save karo
+    user.password = newPassword;
     await user.save();
 
-    await OTP.deleteMany({ phone });
+    await OTP.deleteMany({ email });
 
     res.json({ success: true, message: "Password reset successful" });
   } catch (error) {
     console.error("RESET ERROR", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
-

@@ -11,7 +11,7 @@ const {
 
 // OTP Rate Limiter
 const otpLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000, // 10 min
+  windowMs: 10 * 60 * 1000,
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
