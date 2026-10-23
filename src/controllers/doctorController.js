@@ -13,11 +13,22 @@ exports.createDoctor = async (req, res) => {
       phone,
       description,
       consultationFee,
+      availability,
     } = req.body;
 
     let photoPath = "";
-    if (req.file) {
-      photoPath = req.file.path.replace(/\\/g, "/");
+    if (req.file) photoPath = req.file.path.replace(/\\/g, "/");
+
+    let parsedAvailability = {
+      days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+      timings: [{ startTime: "10:00 AM", endTime: "05:00 PM" }],
+    };
+    if (availability) {
+      try {
+        parsedAvailability = JSON.parse(availability);
+      } catch (e) {
+        console.error("Availability parse error", e);
+      }
     }
 
     const doctor = await Doctor.create({
@@ -30,6 +41,7 @@ exports.createDoctor = async (req, res) => {
       description,
       consultationFee: Number(consultationFee) || 500,
       photo: photoPath,
+      availability: parsedAvailability,
     });
 
     res.status(201).json({ success: true, data: doctor });
@@ -71,9 +83,9 @@ exports.updateDoctor = async (req, res) => {
       phone,
       description,
       consultationFee,
+      availability,
     } = req.body;
 
-    
     const updateData = {
       name,
       department,
@@ -85,32 +97,30 @@ exports.updateDoctor = async (req, res) => {
       consultationFee: Number(consultationFee) || 500,
     };
 
-    if (req.file) {
-      updateData.photo = req.file.path.replace(/\\/g, "/");
+    if (availability) {
+      try {
+        updateData.availability = JSON.parse(availability);
+      } catch (e) {}
     }
+
+    if (req.file) updateData.photo = req.file.path.replace(/\\/g, "/");
 
     const doctor = await Doctor.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
       runValidators: true,
     });
 
-    if (!doctor) {
-      return res.status(404).json({
-        success: false,
-        message: "Doctor not found",
-      });
-    }
+    if (!doctor)
+      return res
+        .status(404)
+        .json({ success: false, message: "Doctor not found" });
 
-    res.status(200).json({
-      success: true,
-      data: doctor,
-      message: "Doctor updated successfully",
-    });
+    res
+      .status(200)
+      .json({ success: true, data: doctor, message: "Doctor updated" });
   } catch (error) {
-    console.error("UPDATE DOCTOR ERROR:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message || "Update failed",
-    });
+    res
+      .status(500)
+      .json({ success: false, message: error.message || "Update failed" });
   }
 };

@@ -16,8 +16,8 @@ const doctorSchema = new mongoose.Schema(
         "Psychiatric Department",
         "ENT Department",
         "Pathology Department",
-        "Neurology",
-        "Cardiology",
+        "Neurology Department",
+        "Cardiology Department",
         "Dental Department",
         "General Surgery",
         "Pediatric Surgery",
@@ -42,15 +42,18 @@ const doctorSchema = new mongoose.Schema(
       min: 0,
     },
 
-    availableSlots: [
-      {
-        date: { type: Date, required: true },
-        slots: {
-          type: [String],
-          enum: ["10:00 AM", "12:30 PM", "04:00 PM", "06:30 PM"],
-        },
+    availability: {
+      days: {
+        type: [String],
+        default: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
       },
-    ],
+      timings: [
+        {
+          startTime: { type: String, required: true },
+          endTime: { type: String, required: true },
+        },
+      ],
+    },
   },
   { timestamps: true },
 );
