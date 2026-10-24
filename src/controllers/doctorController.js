@@ -1,7 +1,6 @@
 const Doctor = require("../models/doctorModel");
 
 /* ================= CREATE DOCTOR ================= */
-
 exports.createDoctor = async (req, res) => {
   try {
     const {
@@ -50,24 +49,17 @@ exports.createDoctor = async (req, res) => {
   }
 };
 
-/* ================= GET ALL DOCTORS (With Filter) ================= */
+/* ================= GET ALL DOCTORS ================= */
 exports.getAllDoctors = async (req, res) => {
   try {
     const { department } = req.query;
-
     const filter = department ? { department: department } : {};
-
     const doctors = await Doctor.find(filter).sort({ createdAt: -1 });
-
-    res.status(200).json({
-      success: true,
-      data: doctors,
-    });
+    res.status(200).json({ success: true, data: doctors });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch doctors",
-    });
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch doctors" });
   }
 };
 
@@ -84,6 +76,7 @@ exports.updateDoctor = async (req, res) => {
       description,
       consultationFee,
       availability,
+      isAvailable,
     } = req.body;
 
     const updateData = {
@@ -96,6 +89,10 @@ exports.updateDoctor = async (req, res) => {
       description,
       consultationFee: Number(consultationFee) || 500,
     };
+
+    if (isAvailable !== undefined) {
+      updateData.isAvailable = isAvailable === "true" || isAvailable === true;
+    }
 
     if (availability) {
       try {
@@ -122,5 +119,29 @@ exports.updateDoctor = async (req, res) => {
     res
       .status(500)
       .json({ success: false, message: error.message || "Update failed" });
+  }
+};
+
+/* ================= TOGGLE STATUS (Naya Function) ================= */
+exports.toggleDoctorStatus = async (req, res) => {
+  try {
+    const doctor = await Doctor.findById(req.params.id);
+    if (!doctor)
+      return res
+        .status(404)
+        .json({ success: false, message: "Doctor not found" });
+
+    doctor.isAvailable = !doctor.isAvailable;
+    await doctor.save();
+
+    res
+      .status(200)
+      .json({
+        success: true,
+        data: doctor,
+        message: `Doctor is now ${doctor.isAvailable ? "Active" : "Inactive"}`,
+      });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };

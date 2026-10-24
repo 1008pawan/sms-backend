@@ -5,11 +5,12 @@ const {
   createDoctor,
   getAllDoctors,
   updateDoctor,
+  toggleDoctorStatus,
 } = require("../controllers/doctorController");
-const Doctor = require("../models/doctorModel");
-const upload = require('../middlewares/multer');
-const adminAuth = require("../middlewares/adminAuthMiddleware");
 
+const Doctor = require("../models/doctorModel");
+const upload = require("../middlewares/multer");
+const adminAuth = require("../middlewares/adminAuthMiddleware");
 
 router.get("/public/all", async (req, res) => {
   try {
@@ -20,32 +21,22 @@ router.get("/public/all", async (req, res) => {
   }
 });
 
-
-// 🔐 ADMIN ONLY ROUTES
 router.get("/doctors", adminAuth, getAllDoctors);
-router.post('/doctors', upload.single('photo'), createDoctor);
+router.post("/doctors", upload.single("photo"), createDoctor);
 router.put("/doctors/:id", upload.single("photo"), adminAuth, updateDoctor);
 
-// USER SIDE (NO ADMIN AUTH)
+router.patch("/doctors/:id/toggle-status", adminAuth, toggleDoctorStatus);
+
 router.get("/", async (req, res) => {
   try {
     const { department } = req.query;
-    console.log("DEPARTMENT 👉", department);
-
     const doctors = await Doctor.find({ department });
-
-    res.status(200).json({
-      success: true,
-      data: doctors,
-    });
+    res.status(200).json({ success: true, data: doctors });
   } catch (error) {
-    console.error("DOCTOR FETCH ERROR 👉", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch doctors",
-    });
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch doctors" });
   }
 });
-
 
 module.exports = router;
