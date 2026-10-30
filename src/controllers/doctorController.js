@@ -16,7 +16,17 @@ exports.createDoctor = async (req, res) => {
     } = req.body;
 
     let photoPath = "";
-    if (req.file) photoPath = req.file.path.replace(/\\/g, "/");
+    if (req.file) {
+      // 👇 Backslash ko slash me convert karo
+      const normalizedPath = req.file.path.replace(/\\/g, "/");
+
+      // 👇 Sirf "uploads/" ke baad ka hissa save karo (absolute path hatao)
+      const uploadIndex = normalizedPath.indexOf("uploads/");
+      photoPath =
+        uploadIndex !== -1
+          ? normalizedPath.substring(uploadIndex)
+          : normalizedPath;
+    }
 
     let parsedAvailability = {
       days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
@@ -134,13 +144,11 @@ exports.toggleDoctorStatus = async (req, res) => {
     doctor.isAvailable = !doctor.isAvailable;
     await doctor.save();
 
-    res
-      .status(200)
-      .json({
-        success: true,
-        data: doctor,
-        message: `Doctor is now ${doctor.isAvailable ? "Active" : "Inactive"}`,
-      });
+    res.status(200).json({
+      success: true,
+      data: doctor,
+      message: `Doctor is now ${doctor.isAvailable ? "Active" : "Inactive"}`,
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

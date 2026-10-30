@@ -31,7 +31,7 @@ exports.loginUser = async (req, res) => {
       });
     }
 
-    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "30m" });
 
     return res.status(200).json({
       success: true,
@@ -155,7 +155,7 @@ exports.addUser = async (req, res) => {
     const token = jwt.sign(
       { id: user._id },
       process.env.JWT_SECRET || "secret123",
-      { expiresIn: "7d" },
+      { expiresIn: "30m" },
     );
 
     res.cookie("token", token, {
@@ -343,4 +343,3 @@ exports.changePassword = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
